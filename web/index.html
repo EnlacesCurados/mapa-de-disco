@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mapa de Disco</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --paper:#E6EBEF; --panel:#F5F7F9; --ink:#17222E; --ink2:#4E5D6C; --line:#C3CCD5;
+  --sea:#1F4E79; --sea-soft:#D5E1EC; --warn:#B3261E;
+  --c0:#D9485A; --c1:#EFA63A; --c2:#8C6CC4; --c3:#3E8CD0; --c4:#93A83A; --c5:#2BA39B; --c6:#718194; --c7:#BDB7A8;
+  --font:Bahnschrift,"DIN Alternate","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.4 var(--font);color:var(--ink);background:var(--paper);overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:4px;padding:6px 12px}
+button:hover{border-color:var(--sea)}
+button:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--sea);outline-offset:2px}
+button.primary{background:var(--sea);border-color:var(--sea);color:#fff}
+button.danger{border-color:var(--warn);color:var(--warn)}
+button.danger:hover{background:var(--warn);color:#fff}
+button:disabled{opacity:.45;cursor:default}
+.hidden{display:none!important}
+.num{font-variant-numeric:tabular-nums}
+
+/* Start screen */
+#start{height:100%;overflow:auto;padding:48px clamp(20px,6vw,96px)}
+#start h1{font-size:44px;font-weight:700;font-stretch:75%;letter-spacing:-.01em;margin:0 0 4px}
+#start .lede{color:var(--ink2);max-width:60ch;margin:0 0 36px;font-size:17px}
+#start h2{font-size:15px;font-weight:600;color:var(--ink2);margin:28px 0 10px}
+.drives{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.drive{text-align:left;padding:14px 16px;background:var(--panel)}
+.drive b{font-size:22px;font-stretch:75%}
+.drive .bar{height:10px;background:var(--sea-soft);margin:8px 0 6px;position:relative}
+.drive .bar i{position:absolute;inset:0 auto 0 0;background:var(--sea)}
+.drive .bar i.full{background:var(--warn)}
+.drive small{color:var(--ink2)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.pathrow{display:flex;gap:8px;max-width:820px}
+.pathrow input{flex:1;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink)}
+#browser{max-width:820px;margin-top:10px;background:var(--panel);border:1px solid var(--line);max-height:300px;overflow:auto}
+#browser div{padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--paper);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#browser div:hover{background:var(--sea-soft)}
+#browser .up{color:var(--ink2)}
+#startErr{color:var(--warn);margin-top:10px;min-height:1.4em}
+
+/* Scan in progress */
+#scanning{height:100%;display:grid;place-content:center;gap:10px;padding:24px;text-align:left}
+#scanning .big{font-size:64px;font-weight:700;font-stretch:75%;line-height:1}
+#scanning .sub{color:var(--ink2);font-size:17px}
+#scanning .cur{color:var(--ink2);max-width:min(80vw,900px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+.sweep{height:4px;width:min(80vw,900px);background:var(--sea-soft);overflow:hidden}
+.sweep i{display:block;height:100%;width:30%;background:var(--sea);animation:sweep 1.4s linear infinite}
+@keyframes sweep{from{transform:translateX(-100%)}to{transform:translateX(340%)}}
+@media (prefers-reduced-motion:reduce){.sweep i{animation:none;width:100%}}
+
+/* Map */
+#app{height:100%;display:grid;grid-template-rows:auto 1fr auto;grid-template-columns:1fr 330px}
+#top{grid-column:1/3;display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+#crumbs{flex:1;display:flex;align-items:center;min-width:0;overflow:hidden;white-space:nowrap;font-size:16px}
+#crumbs button{border:0;background:none;padding:3px 5px;border-radius:3px;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+#crumbs button:hover{background:var(--sea-soft)}
+#crumbs button.here{font-weight:700;cursor:default}
+#crumbs span{color:var(--line)}
+.seg{display:flex}
+.seg button{border-radius:0;margin-left:-1px;padding:6px 10px}
+.seg button:first-child{border-radius:4px 0 0 4px;margin-left:0}
+.seg button:last-child{border-radius:0 4px 4px 0}
+.langrow{display:flex;justify-content:flex-end;margin-bottom:8px}
+.ver{color:var(--ink2);font-size:13px;margin-top:40px}
+#freeBtn[aria-pressed="true"]{background:#2E8B4E;border-color:#2E8B4E;color:#fff}
+.seg button.on{background:var(--ink);color:#fff;border-color:var(--ink);position:relative}
+#stage{position:relative;min-width:0;min-height:0;background:var(--paper)}
+#stage canvas{position:absolute;inset:0;width:100%;height:100%}
+#over{pointer-events:none}
+#clean{position:absolute;inset:0;overflow:auto;background:var(--paper);padding:22px 26px 40px}
+#stage.cleanv canvas,#stage.cleanv #hud3d,#stage.cleanv #card3d,#stage.cleanv #empty{display:none!important}
+#clean .intro{max-width:76ch;color:var(--ink2);margin:0 0 18px;font-size:16px}
+#clean section{background:var(--panel);border:1px solid var(--line);margin-bottom:16px}
+#clean header{display:flex;align-items:baseline;gap:14px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+#clean header h3{font-size:19px;margin:0;font-weight:700}
+#clean header .tot{font-size:19px;font-weight:700;font-stretch:75%}
+#clean header p{flex-basis:100%;margin:0;color:var(--ink2);font-size:14px;max-width:80ch}
+#clean header .sp{flex:1}
+#clean .none{padding:12px 16px;color:var(--ink2)}
+.crow{display:grid;grid-template-columns:26px 6px minmax(0,1fr) auto 92px;gap:10px;align-items:center;padding:6px 16px;border-bottom:1px solid var(--paper);cursor:pointer}
+.crow:hover{background:var(--sea-soft)}
+.crow.sel{background:var(--sea-soft);box-shadow:inset 3px 0 0 var(--ink)}
+.crow i{width:6px;align-self:stretch}
+.crow b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crow small{display:block;color:var(--ink2);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crow .dt{color:var(--ink2);font-size:13px}
+.crow .sz{text-align:right;font-weight:600}
+.cb{width:24px;height:24px;padding:0;border-radius:3px;line-height:1;font-size:15px;display:grid;place-content:center}
+.cb.on{background:var(--warn);border-color:var(--warn);color:#fff}
+.dgrp{padding:8px 16px;background:var(--paper);display:flex;gap:12px;align-items:center;font-weight:600;flex-wrap:wrap}
+.dgrp .sp{flex:1}
+.keep{font-size:12px;color:var(--sea);border:1px solid var(--sea);border-radius:3px;padding:0 5px;margin-left:8px;font-weight:500}
+.prog{height:4px;background:var(--sea-soft);margin:0 16px 12px}.prog u{display:block;height:100%;background:var(--sea)}
+#basketSec{background:#FBEDEB}
+#basketSec .btot{font-size:22px;font-weight:700;font-stretch:75%;margin:2px 0 8px}
+#basketSec .brow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+#basketList{max-height:150px;overflow:auto;margin:0 -16px}
+.bitem{display:grid;grid-template-columns:minmax(0,1fr) auto 22px;gap:8px;align-items:center;padding:3px 16px;font-size:13.5px}
+.bitem span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bitem button{padding:0;width:22px;height:22px;border:0;background:none;color:var(--ink2)}
+.bitem button:hover{color:var(--warn)}
+.chg{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:4px 16px;cursor:pointer;border:0;background:none;width:100%;text-align:left;border-radius:0}
+.chg:hover{background:var(--sea-soft)}
+.chg b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chg small{display:block;color:var(--ink2);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+.grow{color:#A8321F;font-weight:600}.shrink{color:var(--sea);font-weight:600}
+#changesList{margin:0 -16px}
+#changesList p{margin:0;padding:0 16px;color:var(--ink2);font-size:14px}
+#gl{display:none;cursor:crosshair}
+#stage.three{background:#03050B}
+#stage.three #map{display:none}
+#stage.three #gl{display:block}
+#hud3d{position:absolute;left:12px;bottom:10px;color:#9FE8FF;font-size:13px;line-height:1.5;pointer-events:none;text-shadow:0 0 6px #03050B,0 0 2px #03050B;max-width:60%}
+#hud3d b{color:#fff;font-weight:600}
+#card3d{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);background:rgba(3,8,18,.92);border:1px solid #37D7FF;box-shadow:0 0 18px rgba(55,215,255,.35);color:#fff;padding:14px 16px;border-radius:4px;min-width:300px;max-width:min(560px,80%)}
+#card3d .nm{font-weight:700;font-size:17px;word-break:break-all;line-height:1.2}
+#card3d .sz{color:#9FE8FF;margin:2px 0 10px}
+#card3d .row{display:flex;gap:8px;flex-wrap:wrap}
+#card3d button{background:transparent;color:#fff;border-color:#37D7FF}
+#card3d button:hover{background:#37D7FF;color:#03050B}
+#card3d button.danger{border-color:#FF6A5C;color:#FF9388}
+#card3d button.danger:hover{background:#FF6A5C;color:#03050B}
+#card3d small{display:block;color:#7FA6B8;margin-top:8px}
+#empty{position:absolute;inset:0;display:grid;place-content:center;color:var(--ink2);font-size:17px;text-align:center;padding:24px}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:#fff;padding:7px 10px;border-radius:4px;font-size:13.5px;max-width:420px;z-index:5;line-height:1.35}
+#tip b{display:block;font-size:15px;word-break:break-all}
+#tip span{opacity:.75}
+#side{border-left:1px solid var(--line);background:var(--panel);overflow:auto;min-height:0}
+#side section{padding:14px 16px;border-bottom:1px solid var(--line)}
+#side h3{font-size:14px;font-weight:600;color:var(--ink2);margin:0 0 8px}
+#selName{font-size:18px;font-weight:700;word-break:break-all;line-height:1.2}
+#selSize{font-size:34px;font-weight:700;font-stretch:75%;line-height:1.1;margin:6px 0 2px}
+#selMeta{color:var(--ink2);font-size:13.5px;word-break:break-all}
+#selActions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+#selNone{color:var(--ink2)}
+.cat{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:4px 6px;margin:0 -6px;border-radius:3px;cursor:pointer;border:0;background:none;width:calc(100% + 12px);text-align:left}
+.cat:hover{background:var(--sea-soft)}
+.cat.on{background:var(--ink);color:#fff}
+.cat.off{opacity:.4}
+.cat i{width:14px;height:14px;display:block}
+.cat .barw{grid-column:2/4;height:3px;background:var(--line)}
+.cat .barw u{display:block;height:100%;background:currentColor}
+#topList{margin:0 -16px}
+.trow{display:grid;grid-template-columns:6px 1fr auto;gap:8px;align-items:center;padding:5px 16px;cursor:pointer;border:0;background:none;width:100%;text-align:left;border-radius:0}
+.trow:hover{background:var(--sea-soft)}
+.trow i{width:6px;align-self:stretch}
+.trow div{min-width:0}
+.trow b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trow small{display:block;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left;font-size:12px}
+#status{grid-column:1/3;display:flex;gap:18px;padding:6px 12px;border-top:1px solid var(--line);background:var(--panel);font-size:13.5px;color:var(--ink2);white-space:nowrap;overflow:hidden}
+#status b{color:var(--ink);font-weight:600}
+#status .warnc{color:var(--warn)}
+dialog{border:1px solid var(--line);border-radius:6px;padding:22px 24px;max-width:480px;font:inherit;color:var(--ink);background:#fff}
+dialog::backdrop{background:rgba(23,34,46,.45)}
+dialog h4{margin:0 0 8px;font-size:19px}
+dialog p{margin:0 0 8px;word-break:break-all}
+dialog .note{color:var(--ink2);font-size:13.5px;word-break:normal}
+dialog .row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+#toast{position:fixed;left:50%;bottom:44px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:4px;z-index:9;max-width:80vw}
+@media (max-width:820px){#app{grid-template-columns:1fr}#side{display:none}#top{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+
+<div id="start">
+  <div class="langrow"><div class="seg lang" role="group" aria-label="Language"><button data-lang="es">Español</button><button data-lang="en">English</button></div></div>
+  <h1>Mapa de Disco</h1>
+  <p class="lede" data-i18n="lede"></p>
+  <h2 data-i18n="h_drives"></h2>
+  <div class="drives" id="drives"></div>
+  <h2 data-i18n="h_quick"></h2>
+  <div class="chips" id="quick"></div>
+  <h2 data-i18n="h_other"></h2>
+  <div class="pathrow">
+    <input id="pathIn" data-i18n-placeholder="ph_path" data-i18n-aria="aria_path" spellcheck="false">
+    <button id="browseBtn" data-i18n="browse"></button>
+    <button id="goBtn" class="primary" data-i18n="analyze"></button>
+  </div>
+  <div id="browser" class="hidden"></div>
+  <div id="startErr" role="alert"></div>
+  <p class="ver">v__VERSION__</p>
+</div>
+
+<div id="scanning" class="hidden">
+  <div class="big num" id="scBytes">0 B</div>
+  <div class="sub num" id="scCount"></div>
+  <div class="sweep"><i></i></div>
+  <div class="cur" id="scCur"></div>
+</div>
+
+<div id="app" class="hidden">
+  <div id="top">
+    <button id="upBtn" data-i18n="up" data-i18n-title="up_title"></button>
+    <nav id="crumbs" data-i18n-aria="aria_crumbs"></nav>
+    <div class="seg view" role="group" data-i18n-aria="view_title"><button data-view="2d" class="on" data-i18n="view_map"></button><button data-view="3d" data-i18n="view_3d" data-i18n-title="view_3d_title"></button><button data-view="clean" data-i18n="view_clean" data-i18n-title="view_clean_title"></button></div>
+    <button id="freeBtn" data-i18n="free_toggle" data-i18n-title="free_title" aria-pressed="false"></button>
+    <div class="seg det" role="group" data-i18n-aria="detail_title" data-i18n-title="detail_title">
+      <button data-d="0" data-i18n="d0"></button><button data-d="1" class="on" data-i18n="d1"></button><button data-d="2" data-i18n="d2"></button>
+    </div>
+    <button id="rescanBtn" data-i18n="rescan"></button>
+    <button id="changeBtn" data-i18n="change"></button>
+    <div class="seg lang" role="group" aria-label="Language"><button data-lang="es">ES</button><button data-lang="en">EN</button></div>
+  </div>
+  <div id="stage">
+    <canvas id="map"></canvas><canvas id="gl"></canvas><canvas id="over"></canvas>
+    <div id="clean" class="hidden"></div>
+    <div id="hud3d" class="hidden"></div>
+    <div id="card3d" class="hidden"><div class="nm" id="c3name"></div><div class="sz num" id="c3size"></div><div class="row"><button id="c3reveal" data-i18n="reveal"></button><button id="c3trash" class="danger" data-i18n="trash"></button><button id="c3basket"></button></div><small data-i18n="card_hint"></small></div>
+    <div id="empty" class="hidden" data-i18n="empty"></div>
+  </div>
+  <aside id="side">
+    <section>
+      <div id="selNone" data-i18n="sel_none"></div>
+      <div id="sel" class="hidden">
+        <div id="selName"></div>
+        <div id="selSize" class="num"></div>
+        <div id="selMeta"></div>
+        <div id="selActions">
+          <button id="enterBtn" data-i18n="enter"></button>
+          <button id="revealBtn" data-i18n="reveal"></button>
+          <button id="trashBtn" class="danger" data-i18n="trash"></button>
+          <button id="basketBtn"></button>
+        </div>
+      </div>
+    </section>
+    <section id="basketSec" class="hidden">
+      <h3 id="basketTitle"></h3>
+      <div class="btot num" id="basketTotal"></div>
+      <div class="brow"><button id="basketTrash" class="danger" data-i18n="basket_trash"></button><button id="basketClear" data-i18n="basket_clear"></button></div>
+      <div id="basketList"></div>
+    </section>
+    <section>
+      <h3 data-i18n="h_types"></h3>
+      <div id="legend"></div>
+    </section>
+    <section>
+      <h3 id="changesTitle"></h3>
+      <div id="changesList"></div>
+    </section>
+    <section>
+      <h3 id="topTitle"></h3>
+      <div id="topList"></div>
+    </section>
+  </aside>
+  <div id="status"></div>
+</div>
+
+<div id="tip" class="hidden"></div>
+<div id="toast" class="hidden" role="status"></div>
+<dialog id="dlg">
+  <h4 id="dlgTitle" data-i18n="dlg_title"></h4>
+  <p id="dlgWhat"></p>
+  <p class="note" data-i18n="dlg_note"></p>
+  <div class="row"><button id="dlgNo" data-i18n="cancel"></button><button id="dlgYes" class="danger" data-i18n="trash"></button></div>
+</dialog>
+
+<script>
+const TOKEN = "__TOKEN__";
+const $ = id => document.getElementById(id);
+const I18N = {
+es: {
+  cats: ["Vídeo","Imagen","Audio","Documentos","Comprimidos e imágenes de disco","Código y datos","Programas y sistema","Otros"],
+  lede: "Elige un disco o una carpeta. Verás cada archivo como un bloque: cuanto más grande el bloque, más espacio ocupa.",
+  h_drives: "Discos", h_quick: "Carpetas habituales", h_other: "Otra carpeta", home: "Carpeta de usuario",
+  ph_path: "Escribe o pega una ruta, por ejemplo D:\\Proyectos", aria_path: "Ruta de la carpeta", aria_crumbs: "Ruta",
+  browse: "Explorar", analyze: "Analizar", up: "Subir", up_title: "Subir un nivel (Retroceso)",
+  detail_title: "Nivel de detalle del mapa", d0: "Poco detalle", d1: "Medio", d2: "Mucho",
+  rescan: "Volver a analizar", change: "Cambiar carpeta", empty: "Esta carpeta está vacía.",
+  sel_none: "Haz clic en un bloque para ver sus datos. Doble clic en una carpeta para entrar en ella.",
+  enter: "Entrar", reveal: "Abrir ubicación", trash: "Enviar a la papelera", cancel: "Cancelar",
+  h_types: "Tipos de archivo en esta carpeta", h_top: "Archivos más grandes", h_top_cat: "Archivos más grandes: {0}",
+  dlg_title: "¿Enviar a la papelera?", dlg_note: "Podrás recuperarlo desde la Papelera de reciclaje. El espacio no queda libre hasta que la vacíes.",
+  free_of: "{0} libres de {1}", up_to: "Subir a {0}", no_subdirs: "No hay subcarpetas aquí.", need_path: "Escribe una ruta o elige un disco.",
+  scan_count: "{0} archivos en {1} carpetas", small_items: "{0} elementos pequeños", small_grouped: "{0} elementos pequeños agrupados",
+  pct_view: "{0} % de esta vista", folder_with: "Carpeta con {0} archivos", raise_detail: "Sube el nivel de detalle o entra en la carpeta para verlos",
+  modified: "modificado el {0}", modified_cap: "Modificado el {0}", remove_filter: "Quitar el filtro", highlight_type: "Resaltar solo este tipo",
+  none_of_type: "No hay archivos de este tipo aquí.", st_view: "<b>{0}</b> en esta vista", st_files: "{0} archivos",
+  st_disk: "Disco: <b>{0}</b> libres de {1}", st_trashed: "En la papelera esta sesión: <b>{0}</b> (vacíala para liberar el espacio)",
+  st_cloud: "{0} solo en la nube, sin contar", st_cloud_title: "Archivos de OneDrive que no están descargados: no ocupan disco y no se muestran",
+  st_errors: "{0} carpetas sin permiso de lectura", st_errors_title: "Windows no deja leer esas carpetas. Para verlas, abre el programa con clic derecho, Ejecutar como administrador.",
+  st_elapsed: "Analizado en {0} s", toast_trashed: "Enviado a la papelera: {0} ({1})",
+  err_not_folder: "No se puede abrir esa carpeta. Comprueba la ruta.", err_unreadable: "No se puede leer esa carpeta. Comprueba la ruta.",
+  err_busy: "Ya hay un análisis en marcha.", err_gone: "Esa carpeta ya no está en el análisis.", err_not_found: "Ese elemento ya no está en el análisis.",
+  err_outside: "Solo se pueden enviar a la papelera elementos dentro de la carpeta analizada.",
+  err_trash_failed: "No se pudo enviar a la papelera (código {0}). Puede que el archivo esté en uso o que la ruta sea demasiado larga.",
+  err_still_there: "El elemento sigue en su sitio: puede que esté en uso o que hayas cancelado.", err_generic: "Algo ha fallado. Vuelve a intentarlo.",
+  view_title: "Tipo de vista", view_map: "Mapa", view_3d: "3D", view_3d_title: "Recorrer la carpeta en 3D",
+  hud_free: "<b>Haz clic</b> para mirar con el ratón y seleccionar · <b>W A S D</b> moverse · <b>Q / E</b> bajar y subir · <b>Mayús</b> ir rápido",
+  hud_locked: "<b>Clic</b> seleccionar · <b>Intro</b> entrar en la carpeta · <b>Retroceso</b> subir un nivel · <b>Esc</b> soltar el ratón",
+  card_hint: "Teclas: F abre la ubicación, Supr envía a la papelera. Haz clic en la escena para seguir.",
+  no_webgl: "Este navegador no puede mostrar la vista 3D (necesita WebGL 2). Prueba con Chrome, Edge o Firefox actualizados.",
+  free_toggle: "Espacio libre", free_title: "Mostrar el espacio libre del disco como un bloque verde", free_name: "Espacio libre", free_tip: "{0} % del disco está libre", free_root: "El bloque de espacio libre se muestra en la vista del disco entero. Sube al nivel superior para verlo.",
+  view_clean: "Limpiar", view_clean_title: "Ver qué se puede borrar", folder: "Carpeta",
+  basket_add: "Añadir a la cesta", basket_remove: "Quitar de la cesta", basket_title: "Cesta de borrado: {0} elementos", basket_trash: "Enviar todo a la papelera", basket_clear: "Vaciar cesta",
+  basket_inside: "Ya está dentro de una carpeta de la cesta.", dlg_many: "¿Enviar {0} elementos ({1}) a la papelera?", and_more: "y {0} más",
+  toast_many: "Enviados a la papelera: {0} elementos ({1})", toast_many_fail: "Enviados: {0} ({1}). No se pudieron enviar {2}; siguen en la cesta.",
+  changes_title: "Qué ha cambiado desde el {0}", changes_title0: "Qué ha cambiado", changes_none: "Ninguna carpeta ha cambiado de tamaño de forma apreciable.",
+  changes_first: "Es el primer análisis de esta carpeta. La próxima vez verás aquí qué ha crecido.", since: "{0} desde el {1}", st_since: "Desde el {0}: <b>{1}</b>",
+  clean_intro: "Lo que probablemente puedes borrar en {0}. Son sugerencias: revisa cada elemento antes de añadirlo a la cesta. Nada se borra hasta que la envías a la papelera.",
+  clean_caches: "Cachés y temporales", clean_caches_sub: "Carpetas y archivos que los programas vuelven a crear o a descargar cuando los necesitan.",
+  clean_inst: "Instaladores descargados", clean_inst_sub: "Instaladores e imágenes de disco que siguen en una carpeta de descargas.",
+  clean_old: "Grandes y sin cambios en más de un año", clean_old_sub: "Archivos de más de 100 MB que no se modifican desde hace más de un año. Que sean antiguos no significa que sobren: decide uno a uno.",
+  clean_dups: "Duplicados", clean_dups_sub: "Archivos de más de 10 MB con el mismo contenido en más de un sitio. Los de más de 64 MB se comparan por tamaño y por muestras repartidas de su contenido, no byte a byte.",
+  dups_find: "Buscar duplicados", dups_again: "Buscar otra vez", dups_running: "Comparando archivos: {0} de {1}", dups_none: "No se han encontrado duplicados.",
+  dups_group: "{0} copias de {1} cada una: sobran {2}", dups_add: "Añadir las copias a la cesta", dups_keep: "se conserva", dups_other: "La última búsqueda se hizo en otra carpeta.",
+  sending: "Enviando a la papelera: {0} de {1}", add_all: "Añadir todo a la cesta", clean_empty: "Nada que señalar aquí.", total_items: "{0} elementos", more_small: "Se muestran los 300 más grandes."
+},
+en: {
+  cats: ["Video","Images","Audio","Documents","Archives and disk images","Code and data","Programs and system","Other"],
+  lede: "Pick a drive or a folder. Every file shows up as a block: the bigger the block, the more space it takes.",
+  h_drives: "Drives", h_quick: "Common folders", h_other: "Another folder", home: "User folder",
+  ph_path: "Type or paste a path, for example D:\\Projects", aria_path: "Folder path", aria_crumbs: "Path",
+  browse: "Browse", analyze: "Scan", up: "Up", up_title: "Go up one level (Backspace)",
+  detail_title: "Map detail level", d0: "Less detail", d1: "Medium", d2: "More",
+  rescan: "Scan again", change: "Change folder", empty: "This folder is empty.",
+  sel_none: "Click a block to see its details. Double-click a folder to go into it.",
+  enter: "Open folder", reveal: "Show in Explorer", trash: "Move to Recycle Bin", cancel: "Cancel",
+  h_types: "File types in this folder", h_top: "Largest files", h_top_cat: "Largest files: {0}",
+  dlg_title: "Move to the Recycle Bin?", dlg_note: "You can restore it from the Recycle Bin. The space is not freed until you empty it.",
+  free_of: "{0} free of {1}", up_to: "Up to {0}", no_subdirs: "No subfolders here.", need_path: "Type a path or pick a drive.",
+  scan_count: "{0} files in {1} folders", small_items: "{0} small items", small_grouped: "{0} small items grouped",
+  pct_view: "{0}% of this view", folder_with: "Folder with {0} files", raise_detail: "Raise the detail level or open the folder to see them",
+  modified: "modified {0}", modified_cap: "Modified {0}", remove_filter: "Remove filter", highlight_type: "Highlight only this type",
+  none_of_type: "No files of this type here.", st_view: "<b>{0}</b> in this view", st_files: "{0} files",
+  st_disk: "Drive: <b>{0}</b> free of {1}", st_trashed: "In the Recycle Bin this session: <b>{0}</b> (empty it to free the space)",
+  st_cloud: "{0} cloud-only, not counted", st_cloud_title: "OneDrive files that are not downloaded: they take no disk space and are not shown",
+  st_errors: "{0} folders without read permission", st_errors_title: "Windows will not let this program read those folders. To see them, right-click the program and choose Run as administrator.",
+  st_elapsed: "Scanned in {0} s", toast_trashed: "Moved to the Recycle Bin: {0} ({1})",
+  err_not_folder: "That folder cannot be opened. Check the path.", err_unreadable: "That folder cannot be read. Check the path.",
+  err_busy: "A scan is already running.", err_gone: "That folder is no longer in the scan.", err_not_found: "That item is no longer in the scan.",
+  err_outside: "Only items inside the scanned folder can be moved to the Recycle Bin.",
+  err_trash_failed: "Could not move it to the Recycle Bin (code {0}). The file may be in use or the path may be too long.",
+  err_still_there: "The item is still there: it may be in use, or you cancelled.", err_generic: "Something went wrong. Try again.",
+  view_title: "View type", view_map: "Map", view_3d: "3D", view_3d_title: "Fly through the folder in 3D",
+  hud_free: "<b>Click</b> to look around with the mouse and select · <b>W A S D</b> move · <b>Q / E</b> down and up · <b>Shift</b> go faster",
+  hud_locked: "<b>Click</b> select · <b>Enter</b> open the folder · <b>Backspace</b> up one level · <b>Esc</b> release the mouse",
+  card_hint: "Keys: F shows it in Explorer, Delete moves it to the Recycle Bin. Click the scene to keep going.",
+  no_webgl: "This browser cannot show the 3D view (it needs WebGL 2). Try an up-to-date Chrome, Edge or Firefox.",
+  free_toggle: "Free space", free_title: "Show the free space on the drive as a green block", free_name: "Free space", free_tip: "{0}% of the drive is free", free_root: "The free space block is shown on the whole-drive view. Go up to the top level to see it.",
+  view_clean: "Clean up", view_clean_title: "See what can be deleted", folder: "Folder",
+  basket_add: "Add to basket", basket_remove: "Remove from basket", basket_title: "Delete basket: {0} items", basket_trash: "Move all to Recycle Bin", basket_clear: "Empty basket",
+  basket_inside: "It is already inside a folder in the basket.", dlg_many: "Move {0} items ({1}) to the Recycle Bin?", and_more: "and {0} more",
+  toast_many: "Moved to the Recycle Bin: {0} items ({1})", toast_many_fail: "Moved: {0} ({1}). {2} could not be moved and are still in the basket.",
+  changes_title: "What changed since {0}", changes_title0: "What changed", changes_none: "No folder has changed size noticeably.",
+  changes_first: "This is the first scan of this folder. Next time you will see here what has grown.", since: "{0} since {1}", st_since: "Since {0}: <b>{1}</b>",
+  clean_intro: "What you can probably delete in {0}. These are suggestions: check each item before adding it to the basket. Nothing is deleted until you move the basket to the Recycle Bin.",
+  clean_caches: "Caches and temporary files", clean_caches_sub: "Folders and files that programs create or download again when they need them.",
+  clean_inst: "Downloaded installers", clean_inst_sub: "Installers and disk images still sitting in a downloads folder.",
+  clean_old: "Large and unchanged for over a year", clean_old_sub: "Files over 100 MB that have not been modified in more than a year. Old does not mean unneeded: decide one by one.",
+  clean_dups: "Duplicates", clean_dups_sub: "Files over 10 MB with the same content in more than one place. Files over 64 MB are compared by size and by samples spread across their content, not byte by byte.",
+  dups_find: "Find duplicates", dups_again: "Search again", dups_running: "Comparing files: {0} of {1}", dups_none: "No duplicates found.",
+  dups_group: "{0} copies of {1} each: {2} to spare", dups_add: "Add the copies to the basket", dups_keep: "kept", dups_other: "The last search was run on another folder.",
+  sending: "Moving to the Recycle Bin: {0} of {1}", add_all: "Add all to basket", clean_empty: "Nothing to flag here.", total_items: "{0} items", more_small: "Showing the 300 largest."
+}};
+let LANG = "en";
+try { LANG = localStorage.getItem("mapadisco.lang") || ""; } catch {}
+if (!I18N[LANG]) LANG = (navigator.language || "en").toLowerCase().startsWith("es") ? "es" : "en";
+let CATS = I18N[LANG].cats, LOC = LANG === "es" ? "es-ES" : "en-US";
+function t(k, ...a) { return (I18N[LANG][k] ?? k).replace(/\{(\d)\}/g, (_, i) => a[i] ?? ""); }
+function applyLang() {
+  CATS = I18N[LANG].cats; LOC = LANG === "es" ? "es-ES" : "en-US"; document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-i18n]").forEach(e => e.textContent = t(e.dataset.i18n));
+  document.querySelectorAll("[data-i18n-title]").forEach(e => e.title = t(e.dataset.i18nTitle));
+  document.querySelectorAll("[data-i18n-aria]").forEach(e => e.setAttribute("aria-label", t(e.dataset.i18nAria)));
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(e => e.placeholder = t(e.dataset.i18nPlaceholder));
+  document.querySelectorAll(".lang button").forEach(b => b.classList.toggle("on", b.dataset.lang === LANG));
+}
+function setLang(l) {
+  LANG = l; try { localStorage.setItem("mapadisco.lang", l); } catch {}
+  applyLang();
+  if (!$("start").classList.contains("hidden")) loadPlaces();
+  if (!$("app").classList.contains("hidden") && tree) { crumbs(); legend(); render(); loadTop(); loadChanges(); statusBar(); select(selected); basketUI(); }
+}
+const css = getComputedStyle(document.documentElement);
+const COL = I18N.es.cats.map((_, i) => css.getPropertyValue("--c" + i).trim());
+const FONT = css.getPropertyValue("--font");
+const DETAIL = [1400, 380, 90]; // minimum px² per block
+
+let SEP = "\\", scanRoot = "", viewPath = "", tree = null, rects = [], hover = null, selected = null;
+let detail = 1, catFilter = -1, status = {}, reqId = 0;
+
+async function api(path, body) {
+  const r = await fetch(path, body
+    ? {method: "POST", headers: {"X-Token": TOKEN, "Content-Type": "application/json"}, body: JSON.stringify(body)}
+    : {headers: {"X-Token": TOKEN}});
+  const j = await r.json().catch(() => ({error: "generic"}));
+  if (!r.ok) { const k = "err_" + j.error; throw new Error(I18N[LANG][k] ? t(k, j.detail) : t("err_generic")); }
+  return j;
+}
+function fmt(b) {
+  if (b < 1024) return b + " B";
+  const u = ["KB", "MB", "GB", "TB"]; let i = -1;
+  do { b /= 1024; i++; } while (b >= 1024 && i < 3);
+  return b.toLocaleString(LOC, {maximumFractionDigits: b >= 100 ? 0 : b >= 10 ? 1 : 2}) + " " + u[i];
+}
+const nf = n => n.toLocaleString(LOC);
+const fdate = s => s ? new Date(s * 1000).toLocaleDateString(LOC, {day: "numeric", month: "short", year: "numeric"}) : "";
+const join = (a, b) => a.endsWith(SEP) ? a + b : a + SEP + b;
+const base = p => { const t = p.endsWith(SEP) ? p.slice(0, -1) : p; return t.slice(t.lastIndexOf(SEP) + 1) || p; };
+const parentOf = p => { const t = p.endsWith(SEP) ? p.slice(0, -1) : p; const i = t.lastIndexOf(SEP); if (i < 0) return p; const r = t.slice(0, i); return (r === "" || /^[A-Za-z]:$/.test(r)) ? r + SEP : r; };
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c])); }
+let toastT;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.remove("hidden"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.add("hidden"), 4500); }
+function show(id) { for (const s of ["start", "scanning", "app"]) $(s).classList.toggle("hidden", s !== id); }
+
+/* ---------- Start ---------- */
+async function loadPlaces() {
+  const p = await api("/api/places"); SEP = p.sep;
+  $("drives").innerHTML = "";
+  for (const d of p.drives) {
+    const used = d.total - d.free, pct = used / d.total * 100;
+    const b = document.createElement("button"); b.className = "drive";
+    b.innerHTML = `<b>${esc(d.path)}</b><div class="bar"><i class="${pct > 90 ? "full" : ""}" style="width:${pct.toFixed(1)}%"></i></div><small class="num">${t("free_of", fmt(d.free), fmt(d.total))}</small>`;
+    b.onclick = () => scan(d.path); $("drives").append(b);
+  }
+  $("quick").innerHTML = "";
+  for (const f of p.folders) { const b = document.createElement("button"); b.textContent = f.name === "@home" ? t("home") : f.name; b.title = f.path; b.onclick = () => scan(f.path); $("quick").append(b); }
+}
+async function browse(path) {
+  try {
+    const r = await api("/api/list?path=" + encodeURIComponent(path));
+    $("pathIn").value = r.path; const box = $("browser"); box.classList.remove("hidden"); box.innerHTML = "";
+    if (r.parent) { const u = document.createElement("div"); u.className = "up"; u.textContent = t("up_to", r.parent); u.onclick = () => browse(r.parent); box.append(u); }
+    for (const d of r.dirs) { const e = document.createElement("div"); e.textContent = d; e.onclick = () => browse(join(r.path, d)); box.append(e); }
+    if (!r.dirs.length) { const e = document.createElement("div"); e.className = "up"; e.textContent = t("no_subdirs"); box.append(e); }
+    $("startErr").textContent = "";
+  } catch (e) { $("startErr").textContent = e.message; }
+}
+$("browseBtn").onclick = async () => { let p = $("pathIn").value.trim(); if (!p) { const pl = await api("/api/places"); p = pl.folders[0] ? pl.folders[0].path : pl.drives[0].path; } browse(p); };
+$("goBtn").onclick = () => { const p = $("pathIn").value.trim(); if (p) scan(p); else $("startErr").textContent = t("need_path"); };
+$("pathIn").onkeydown = e => { if (e.key === "Enter") $("goBtn").click(); };
+
+/* ---------- Scan ---------- */
+async function scan(path) {
+  try { await api("/api/scan", {path}); } catch (e) { $("startErr").textContent = e.message; show("start"); return; }
+  show("scanning"); poll();
+}
+async function poll() {
+  const s = await api("/api/status"); status = s; SEP = s.sep;
+  if (s.state === "scanning") {
+    $("scBytes").textContent = fmt(s.bytes);
+    $("scCount").textContent = t("scan_count", nf(s.files), nf(s.dirs));
+    $("scCur").textContent = s.current || "";
+    setTimeout(poll, 250);
+  } else if (s.state === "done") {
+    if (scanRoot !== s.root) basket.clear(); scanRoot = s.root; $("freeBtn").classList.toggle("hidden", !wholeDrive()); selected = null; catFilter = -1; show("app"); resize(); go(s.root);
+  } else { show("start"); loadPlaces(); }
+}
+
+/* ---------- Map ---------- */
+const glc = $("gl"); let mode3d = false, modeClean = false;
+const MB = 1048576, basket = new Map();
+let showFree = false; try { showFree = localStorage.getItem("mapadisco.free") === "1"; } catch {}
+const wholeDrive = () => !!scanRoot && parentOf(scanRoot) === scanRoot; // the scan covers an entire drive
+function addFree() {
+  if (!showFree || !wholeDrive() || viewPath !== scanRoot || !(status.diskFree > 0)) return;
+  const node = {n: t("free_name"), s: status.diskFree, free: 1}, ch = tree.ch || (tree.ch = []);
+  let i = 0; while (i < ch.length && ch[i].s >= node.s) i++; ch.splice(i, 0, node);
+}
+const cv = $("map"), ov = $("over"), ctx = cv.getContext("2d"), octx = ov.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  const r = $("stage").getBoundingClientRect(); DPR = window.devicePixelRatio || 1; W = Math.floor(r.width); H = Math.floor(r.height);
+  for (const c of [cv, ov]) { c.width = W * DPR; c.height = H * DPR; }
+  glc.width = Math.floor(W * Math.min(DPR, 1.5)); glc.height = Math.floor(H * Math.min(DPR, 1.5));
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); octx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+let rsT; window.addEventListener("resize", () => { clearTimeout(rsT); rsT = setTimeout(() => { if (!$("app").classList.contains("hidden")) { resize(); go(viewPath, true); } }, 150); });
+
+async function go(path, keepSel) {
+  const id = ++reqId;
+  const frac = Math.min(1, DETAIL[detail] / Math.max(1, W * H));
+  let r;
+  try { r = await api(`/api/tree?path=${encodeURIComponent(path)}&frac=${frac}`); }
+  catch (e) { toast(e.message); if (path !== scanRoot) go(scanRoot); return; }
+  if (id !== reqId) return;
+  viewPath = r.tree.n; tree = r.tree; tree.path = viewPath; tree.cats = r.cats; addFree();
+  if (!keepSel) select(null);
+  crumbs(); legend(); render(); loadTop(); loadChanges(); statusBar(); basketUI();
+}
+
+function squarify(items, x, y, w, h, out) {
+  const total = items.reduce((a, i) => a + i.s, 0); if (total <= 0 || w <= 0 || h <= 0) return;
+  const scale = w * h / total; let i = 0;
+  while (i < items.length) {
+    const short = Math.min(w, h); let row = [], sum = 0, worst = Infinity, j = i;
+    while (j < items.length) {
+      const a = items[j].s * scale, ns = sum + a;
+      const mx = Math.max(row.length ? row[0] : a, a), mn = a; // sorted largest first
+      const wst = Math.max(short * short * mx / (ns * ns), ns * ns / (short * short * mn));
+      if (row.length && wst > worst) break;
+      row.push(a); sum = ns; worst = wst; j++;
+    }
+    const thick = sum / short; let off = 0;
+    for (let k = 0; k < row.length; k++) {
+      const len = row[k] / thick;
+      out.push(w >= h ? {node: items[i + k], x, y: y + off, w: thick, h: len} : {node: items[i + k], x: x + off, y, w: len, h: thick});
+      off += len;
+    }
+    if (w >= h) { x += thick; w -= thick; } else { y += thick; h -= thick; }
+    i = j;
+  }
+}
+function fit(c, text, maxW) {
+  if (c.measureText(text).width <= maxW) return text;
+  let lo = 0, hi = text.length;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (c.measureText(text.slice(0, m) + "…").width <= maxW) lo = m; else hi = m - 1; }
+  return lo > 0 ? text.slice(0, lo) + "…" : "";
+}
+function dim(n) { return catFilter >= 0 && !n.d && !n.free && (n.r || n.c !== catFilter); }
+
+function draw() {
+  rects = []; ctx.clearRect(0, 0, W, H); ctx.textBaseline = "middle";
+  $("empty").classList.toggle("hidden", tree.s > 0);
+  if (tree.s <= 0) { drawOver(); return; }
+  layout(tree, 0, 0, W, H, 0, true);
+  drawOver();
+}
+function layout(n, x, y, w, h, depth, isRoot) {
+  const r = {node: n, x, y, w, h, depth}; if (!isRoot) rects.push(r);
+  if (n.d) {
+    const L = Math.max(62, 90 - depth * 5);
+    ctx.fillStyle = `hsl(208 20% ${L}%)`; ctx.fillRect(x, y, w, h);
+    if (!isRoot) { ctx.strokeStyle = "rgba(23,34,46,.55)"; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, w - 1, h - 1); }
+    let ix = x, iy = y, iw = w, ih = h;
+    if (!isRoot) {
+      const head = w > 46 && h > 34;
+      if (head) {
+        ctx.font = `600 12.5px ${FONT}`; ctx.fillStyle = "#17222E";
+        const sz = fmt(n.s); ctx.font = `12px ${FONT}`; const szW = ctx.measureText(sz).width;
+        ctx.font = `600 12.5px ${FONT}`;
+        let gW = 0; const gTxt = w > 250 && big(n) ? arrow(n.g) : "";
+        if (gTxt) { ctx.font = `600 12px ${FONT}`; gW = ctx.measureText(gTxt).width + 10; ctx.fillStyle = n.g > 0 ? "#A8321F" : "#1F4E79"; ctx.textAlign = "right"; ctx.fillText(gTxt, x + w - 5 - szW - 10, y + 9.5); ctx.textAlign = "left"; ctx.fillStyle = "#17222E"; ctx.font = `600 12.5px ${FONT}`; }
+        const name = fit(ctx, n.n, w - 10 - (w > 150 ? szW + 10 : 0) - gW);
+        ctx.fillText(name, x + 5, y + 9.5);
+        if (w > 150) { ctx.font = `12px ${FONT}`; ctx.fillStyle = "#4E5D6C"; ctx.textAlign = "right"; ctx.fillText(sz, x + w - 5, y + 9.5); ctx.textAlign = "left"; }
+        r.head = 17;
+      }
+      const p = w > 24 && h > 24 ? 3 : 1;
+      ix = x + p; iy = y + (head ? 17 : p); iw = w - 2 * p; ih = h - (head ? 17 : p) - p;
+    }
+    if (n.ch && iw > 4 && ih > 4) {
+      const out = []; squarify(n.ch, ix, iy, iw, ih, out);
+      for (const c of out) { if (!c.node.path && !c.node.r && !c.node.free) c.node.path = join(n.path, c.node.n); c.node.parent = n; layout(c.node, c.x, c.y, c.w, c.h, depth + 1); }
+    } else if (!isRoot && !n.ch && iw > 2 && ih > 2) {
+      ctx.fillStyle = "rgba(23,34,46,.10)"; ctx.fillRect(ix, iy, iw, ih); // folder not broken down
+    }
+    return;
+  }
+  ctx.globalAlpha = dim(n) ? .13 : 1;
+  if (n.free) { ctx.fillStyle = "#4CAF6A"; ctx.fillRect(x + .5, y + .5, w - 1, h - 1); }
+  else if (n.r) {
+    ctx.fillStyle = "#CFD6DC"; ctx.fillRect(x + .5, y + .5, w - 1, h - 1);
+    ctx.save(); ctx.beginPath(); ctx.rect(x + .5, y + .5, w - 1, h - 1); ctx.clip(); ctx.strokeStyle = "rgba(23,34,46,.18)"; ctx.lineWidth = 1; ctx.beginPath();
+    for (let d = -h; d < w; d += 7) { ctx.moveTo(x + d, y + h); ctx.lineTo(x + d + h, y); } ctx.stroke(); ctx.restore();
+  } else { ctx.fillStyle = COL[n.c]; ctx.fillRect(x + .5, y + .5, w - 1, h - 1); }
+  if (w > 40 && h > 15) {
+    ctx.fillStyle = "#17222E"; ctx.font = `500 12px ${FONT}`;
+    const label = n.r ? t("small_items", nf(n.r)) : n.n;
+    const two = h > 31; ctx.fillText(fit(ctx, label, w - 8), x + 4, y + (two ? h / 2 - 7 : h / 2));
+    if (two) { ctx.font = `12px ${FONT}`; ctx.globalAlpha *= .75; ctx.fillText(fit(ctx, fmt(n.s), w - 8), x + 4, y + h / 2 + 7); }
+  }
+  ctx.globalAlpha = 1;
+}
+function drawOver() {
+  if (mode3d) return;
+  octx.clearRect(0, 0, W, H);
+  const mark = (r, color, lw) => { octx.strokeStyle = color; octx.lineWidth = lw; octx.strokeRect(r.x + lw / 2, r.y + lw / 2, r.w - lw, r.h - lw); };
+  if (selected) { const r = rects.find(r => r.node.path && r.node.path === selected.path); if (r) { mark(r, "#17222E", 3); mark({x: r.x + 3, y: r.y + 3, w: r.w - 6, h: r.h - 6}, "#fff", 1.5); } }
+  for (const r of rects) {
+    if (!r.node.path || !basket.has(r.node.path)) continue;
+    octx.save(); octx.beginPath(); octx.rect(r.x, r.y, r.w, r.h); octx.clip();
+    octx.fillStyle = "rgba(179,38,30,.28)"; octx.fillRect(r.x, r.y, r.w, r.h);
+    octx.strokeStyle = "rgba(255,255,255,.75)"; octx.lineWidth = 1.5; octx.beginPath();
+    for (let d = -r.h; d < r.w; d += 9) { octx.moveTo(r.x + d, r.y + r.h); octx.lineTo(r.x + d + r.h, r.y); } octx.stroke(); octx.restore();
+    mark(r, "#B3261E", 2.5);
+  }
+  if (hover) mark(hover, "#fff", 2);
+}
+function hit(mx, my) { for (let i = rects.length - 1; i >= 0; i--) { const r = rects[i]; if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return r; } return null; }
+function pos(e) { const b = cv.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; }
+
+cv.addEventListener("mousemove", e => {
+  const [mx, my] = pos(e), r = hit(mx, my);
+  if (r !== hover) { hover = r; drawOver(); }
+  const tp = $("tip"); if (!r) { tp.classList.add("hidden"); return; }
+  const n = r.node, pct = tree.s ? (n.s / tree.s * 100) : 0;
+  tp.innerHTML = `<b>${esc(n.r ? t("small_grouped", nf(n.r)) : n.n)}</b>${fmt(n.s)} ${n.free ? "" : `<span>· ${t("pct_view", pct.toLocaleString(LOC, {maximumFractionDigits: 1}))}</span>`}` +
+    (n.d ? `<br><span>${t("folder_with", nf(n.f || 0))}</span>` : n.free ? `<br><span>${t("free_tip", (status.diskFree / status.diskTotal * 100).toLocaleString(LOC, {maximumFractionDigits: 1}))}</span>` : n.r ? `<br><span>${t("raise_detail")}</span>` : `<br><span>${CATS[n.c]}${n.m ? " · " + t("modified", fdate(n.m)) : ""}</span>`);
+  tp.classList.remove("hidden");
+  const tw = tp.offsetWidth, th = tp.offsetHeight;
+  tp.style.left = Math.min(e.clientX + 14, innerWidth - tw - 8) + "px";
+  tp.style.top = (e.clientY + 18 + th > innerHeight ? e.clientY - th - 10 : e.clientY + 18) + "px";
+});
+cv.addEventListener("mouseleave", () => { hover = null; drawOver(); $("tip").classList.add("hidden"); });
+cv.addEventListener("click", e => { const r = hit(...pos(e)); select(r && !r.node.r ? r.node : r ? r.node.parent : null); });
+cv.addEventListener("dblclick", e => {
+  const r = hit(...pos(e)); if (!r) return;
+  let n = r.node; if (!n.d) n = n.parent;
+  if (n && n.d && n.path !== viewPath) go(n.path);
+});
+function goUp() { if (viewPath !== scanRoot) { const from = viewPath; go(parentOf(viewPath)).then(() => { const r = rects.find(r => r.node.path === from); if (r) select(r.node); }); } }
+$("upBtn").onclick = goUp;
+cv.addEventListener("mouseup", e => { if (e.button === 3) goUp(); });
+document.addEventListener("keydown", e => {
+  if ($("app").classList.contains("hidden") || $("dlg").open || e.target.tagName === "INPUT") return;
+  if (e.key === "Backspace") { e.preventDefault(); goUp(); }
+  if (e.key === "Delete" && selected) askTrash();
+  if (mode3d && e.code === "KeyF" && selected) $("revealBtn").click();
+  if (e.key === "Enter" && selected && selected.d && (mode3d || document.activeElement === document.body)) go(selected.path);
+});
+
+function crumbs() {
+  const c = $("crumbs"); c.innerHTML = "";
+  const parts = []; let p = viewPath;
+  while (true) { parts.unshift(p); if (p === scanRoot || parentOf(p) === p) break; p = parentOf(p); }
+  parts.forEach((p, i) => {
+    if (i) { const s = document.createElement("span"); s.textContent = "›"; c.append(s); }
+    const b = document.createElement("button"); b.textContent = i === 0 ? p : base(p); b.title = p;
+    if (i === parts.length - 1) b.className = "here"; else b.onclick = () => go(p);
+    c.append(b);
+  });
+  c.scrollLeft = c.scrollWidth; $("upBtn").disabled = viewPath === scanRoot;
+}
+function legend() {
+  const box = $("legend"); box.innerHTML = ""; const max = Math.max(...tree.cats, 1);
+  tree.cats.map((s, i) => [s, i]).sort((a, b) => b[0] - a[0]).forEach(([s, i]) => {
+    if (!s) return;
+    const b = document.createElement("button"); b.className = "cat" + (catFilter === i ? " on" : catFilter >= 0 ? " off" : "");
+    b.setAttribute("aria-pressed", catFilter === i);
+    b.innerHTML = `<i style="background:${COL[i]}"></i><span>${CATS[i]}</span><span class="num">${fmt(s)}</span><span class="barw"><u style="width:${(s / max * 100).toFixed(1)}%"></u></span>`;
+    b.title = catFilter === i ? t("remove_filter") : t("highlight_type");
+    b.onclick = () => { catFilter = catFilter === i ? -1 : i; legend(); render(); loadTop(); };
+    box.append(b);
+  });
+}
+async function loadTop() {
+  $("topTitle").textContent = catFilter >= 0 ? t("h_top_cat", CATS[catFilter].toLowerCase()) : t("h_top");
+  const id = reqId; let list;
+  try { list = await api(`/api/top?path=${encodeURIComponent(viewPath)}&cat=${catFilter}`); } catch { return; }
+  if (id !== reqId) return;
+  const box = $("topList"); box.innerHTML = "";
+  if (!list.length) { box.innerHTML = `<div style="padding:4px 16px;color:var(--ink2)">${t("none_of_type")}</div>`; return; }
+  for (const f of list) {
+    const b = document.createElement("button"); b.className = "trow"; b.title = f.p;
+    b.innerHTML = `<i style="background:${COL[f.c]}"></i><div><b>${esc(base(f.p))}</b><small>${esc(parentOf(f.p))}</small></div><span class="num">${fmt(f.s)}</span>`;
+    b.onclick = () => select({n: base(f.p), path: f.p, s: f.s, c: f.c, m: f.m});
+    box.append(b);
+  }
+}
+function select(n) {
+  selected = n && n.path ? n : null;
+  $("sel").classList.toggle("hidden", !selected); $("selNone").classList.toggle("hidden", !!selected);
+  if (selected) {
+    $("selName").textContent = selected.n; $("selSize").textContent = fmt(selected.s);
+    const pct = tree.s ? (selected.s / tree.s * 100).toLocaleString(LOC, {maximumFractionDigits: 1}) : "0";
+    $("selMeta").innerHTML = `${t("pct_view", pct)}<br>` + (selected.d ? (selected.f != null ? t("folder_with", nf(selected.f)) : t("folder")) : CATS[selected.c]) +
+      (selected.g && status.prevTime ? `<br><span class="${selected.g > 0 ? "grow" : "shrink"}">${t("since", arrow(selected.g), fdate(status.prevTime))}</span>` : "") +
+      (selected.m ? `<br>${t("modified_cap", fdate(selected.m))}` : "") + `<br>${esc(selected.path)}`;
+    $("enterBtn").classList.toggle("hidden", !selected.d);
+  }
+  basketBtns(); drawOver(); if (mode3d) sel3d();
+  if (modeClean) document.querySelectorAll(".crow").forEach(r => r.classList.toggle("sel", !!selected && cleanItems[r.dataset.i] && cleanItems[r.dataset.i].path === selected.path));
+}
+$("enterBtn").onclick = () => selected && go(selected.path);
+$("revealBtn").onclick = () => selected && api("/api/reveal", {path: selected.path}).catch(e => toast(e.message));
+let dlgMany = false;
+function askTrash() { if (!selected) return; dlgMany = false; $("dlgTitle").textContent = t("dlg_title"); $("dlgWhat").innerHTML = `<b>${esc(selected.n)}</b> (${fmt(selected.s)})<br><small>${esc(selected.path)}</small>`; $("dlg").showModal(); $("dlgNo").focus(); }
+$("trashBtn").onclick = askTrash;
+$("dlgNo").onclick = () => $("dlg").close();
+$("dlgYes").onclick = async () => {
+  if (dlgMany) return trashBasket();
+  const s = selected; $("dlg").close(); $("dlgYes").disabled = true;
+  try { const r = await api("/api/trash", {path: s.path}); basketDrop(s.path); toast(t("toast_trashed", s.n, fmt(r.size))); if (mode3d) dust3d(s.path); status = await api("/api/status"); go(viewPath); }
+  catch (e) { toast(e.message); }
+  $("dlgYes").disabled = false;
+};
+function statusBar() {
+  const s = status, parts = [`<span>${t("st_view", fmt(tree.s))}</span>`, `<span class="num">${t("st_files", nf(tree.f || 0))}</span>`];
+  if (s.prevTime && tree.g) parts.push(`<span>${t("st_since", fdate(s.prevTime), `<span class="${tree.g > 0 ? "grow" : "shrink"}">${arrow(tree.g)}</span>`)}</span>`);
+  if (s.diskTotal) parts.push(`<span>${t("st_disk", fmt(s.diskFree), fmt(s.diskTotal))}</span>`);
+  if (s.trashed) parts.push(`<span>${t("st_trashed", fmt(s.trashed))}</span>`);
+  if (s.cloud) parts.push(`<span title="${t("st_cloud_title")}">${t("st_cloud", fmt(s.cloud))}</span>`);
+  if (s.errors) parts.push(`<span class="warnc" title="${t("st_errors_title")}">${t("st_errors", nf(s.errors))}</span>`);
+  if (s.elapsed) parts.push(`<span>${t("st_elapsed", s.elapsed.toLocaleString(LOC, {maximumFractionDigits: 1}))}</span>`);
+  $("status").innerHTML = parts.join("");
+}
+
+/* ---------- 3D view ---------- */
+const BG = [0.012, 0.02, 0.043], FOLDER_COL = [0.22, 0.84, 1.0], WX = 320, FOV = 1.05;
+const hex3 = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255);
+const COL3 = COL.map(hex3).map(c => { const m = Math.max(...c); return c.map(v => Math.min(1, v / m * 1.02)); });
+let gl = null, prog = null, gridProg = null, vbo = null, sbo = null, gridVbo = null, boxes = [], nVerts = 0, states = null, labelBoxes = [];
+let dustProg = null, dusts = [];
+let cam = {x: 0, y: 60, z: 0, yaw: 0, pitch: -0.5}, camPath = null, keys = {}, lastT = 0, raf = 0, hover3d = null, WZ = 200;
+function render() { if (modeClean) loadClean(); else if (mode3d) build3d(); else draw(); }
+function sh(type, src) { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function mkProg(vs, fs) { const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p)); return p; }
+function init3d() {
+  if (gl) return true;
+  gl = glc.getContext("webgl2", {antialias: true});
+  if (!gl) { gl = null; return false; }
+  prog = mkProg(`#version 300 es
+    layout(location=0) in vec3 aPos; layout(location=1) in vec3 aCol; layout(location=2) in vec2 aUv; layout(location=3) in vec2 aSize; layout(location=4) in vec2 aMeta; layout(location=5) in float aState;
+    uniform mat4 uVP; uniform vec3 uCam;
+    out vec3 vCol; out vec2 vUv; out vec2 vSize; out vec2 vMeta; out float vState; out float vDist;
+    void main(){ vCol=aCol; vUv=aUv; vSize=aSize; vMeta=aMeta; vState=aState; vDist=distance(aPos,uCam); gl_Position=uVP*vec4(aPos,1.0); }`,
+    `#version 300 es
+    precision highp float;
+    in vec3 vCol; in vec2 vUv; in vec2 vSize; in vec2 vMeta; in float vState; in float vDist;
+    uniform vec3 uBg; uniform float uPulse;
+    out vec4 o;
+    void main(){
+      float d = min(min(vUv.x, vUv.y), min(vSize.x - vUv.x, vSize.y - vUv.y));
+      float aa = fwidth(d);
+      float line = 1.0 - smoothstep(aa * 0.7, aa * 2.0 + 0.015, d);
+      float glow = exp(-d * 2.2);
+      vec3 c;
+      if (vMeta.y > 0.5) c = vCol * 0.46 * vMeta.x + (vCol * 1.5 + 0.12) * line + vCol * glow * 0.45;
+      else c = vCol * 0.07 * vMeta.x + vCol * line * 1.1 + vCol * glow * 0.2;
+      if (vState > 1.5) { float stripe = step(0.5, fract((vUv.x + vUv.y) * 0.9)); c = mix(c, vec3(1.0, 0.93, 0.88), 0.25 + 0.45 * stripe) + vec3(1.0) * line * 0.5; }
+      else if (vState > 0.5) c = c * (1.5 + 0.4 * uPulse) + vCol * (0.14 + 0.10 * uPulse);
+      else if (vState < -0.5) { float g = dot(c, vec3(0.30, 0.59, 0.11)); c = mix(c, vec3(g), 0.93) * 0.62; }
+      float f = exp(-vDist * 0.0042);
+      o = vec4(mix(uBg, c, f), 1.0);
+    }`);
+  gridProg = mkProg(`#version 300 es
+    layout(location=0) in vec3 aPos; uniform mat4 uVP; out vec3 vP;
+    void main(){ vP=aPos; gl_Position=uVP*vec4(aPos,1.0); }`,
+    `#version 300 es
+    precision highp float;
+    in vec3 vP; uniform vec3 uBg; uniform vec3 uCam; out vec4 o;
+    void main(){
+      vec2 q = vP.xz / 10.0; vec2 g = abs(fract(q - 0.5) - 0.5) / fwidth(q);
+      float line = 1.0 - min(min(g.x, g.y), 1.0);
+      float f = exp(-distance(vP, uCam) * 0.0048);
+      o = vec4(uBg + vec3(0.10, 0.45, 0.62) * line * 0.55 * f, 1.0);
+    }`);
+  dustProg = mkProg(`#version 300 es
+    layout(location=0) in vec3 aPos; layout(location=1) in vec3 aVel; layout(location=2) in float aDelay; layout(location=3) in float aSeed;
+    uniform mat4 uVP; uniform vec3 uCam; uniform float uT; uniform float uScale;
+    out float vK;
+    void main(){
+      float t = max(0.0, uT - aDelay); float k = clamp(t / 2.3, 0.0, 1.0);
+      vec3 swirl = vec3(sin(aSeed * 40.0 + t * 3.0), cos(aSeed * 23.0 + t * 2.0) * 0.6, sin(aSeed * 31.0 + t * 2.5));
+      vec3 p = aPos + aVel * t + swirl * t * 1.1 + vec3(1.1, 0.45, 0.3) * t * t;
+      gl_Position = uVP * vec4(p, 1.0);
+      gl_PointSize = clamp(uScale * (1.0 - k * 0.7) / distance(p, uCam), 1.0, 10.0);
+      vK = k;
+    }`,
+    `#version 300 es
+    precision highp float;
+    in float vK; uniform vec3 uCol; out vec4 o;
+    void main(){
+      vec2 c = gl_PointCoord - 0.5; if (dot(c, c) > 0.25) discard;
+      o = vec4(mix(uCol * 0.8, vec3(0.60, 0.54, 0.47), smoothstep(0.0, 0.6, vK)), (1.0 - vK * vK) * 0.95);
+    }`);
+  vbo = gl.createBuffer(); sbo = gl.createBuffer(); gridVbo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, gridVbo);
+  const G = 6000; gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-G, -0.05, -G, G, -0.05, -G, G, -0.05, G, -G, -0.05, -G, G, -0.05, G, -G, -0.05, G]), gl.STATIC_DRAW);
+  return true;
+}
+function layout3d(n, x, z, w, d, depth, out) {
+  if (!n.ch) return;
+  const items = []; squarify(n.ch, x, z, w, d, items);
+  for (const it of items) {
+    const c = it.node; if (!c.path && !c.r && !c.free) c.path = join(n.path, c.n); c.parent = n;
+    const g = Math.min(0.35, it.w * 0.06, it.h * 0.06), bx = it.x + g, bz = it.y + g, bw = it.w - 2 * g, bd = it.h - 2 * g;
+    if (bw <= 0.02 || bd <= 0.02) continue;
+    const y0 = depth * 0.9;
+    if (c.d) {
+      if (c.ch) {
+        out.push({node: c, x0: bx, z0: bz, x1: bx + bw, z1: bz + bd, y0, y1: y0 + 0.9, kind: 0, col: FOLDER_COL});
+        const p = Math.min(1.3, bw * 0.07, bd * 0.07);
+        layout3d(c, bx + p, bz + p, bw - 2 * p, bd - 2 * p, depth + 1, out);
+      } else out.push({node: c, x0: bx, z0: bz, x1: bx + bw, z1: bz + bd, y0, y1: y0 + 2.2, kind: 0, col: FOLDER_COL});
+    } else if (c.free) {
+      out.push({node: c, x0: bx, z0: bz, x1: bx + bw, z1: bz + bd, y0, y1: y0 + 0.6, kind: 1, col: [0.32, 1.45, 0.6]});
+    } else if (c.r) {
+      out.push({node: c, x0: bx, z0: bz, x1: bx + bw, z1: bz + bd, y0, y1: y0 + 0.5, kind: 1, col: [0.42, 0.47, 0.53]});
+    } else {
+      const hgt = 1.2 + 34 * Math.pow(c.s / Math.max(1, layout3d.max), 0.45);
+      out.push({node: c, x0: bx, z0: bz, x1: bx + bw, z1: bz + bd, y0, y1: y0 + hgt, kind: 1, col: COL3[c.c]});
+    }
+  }
+}
+function maxFile(n) { let m = 0; if (n.ch) for (const c of n.ch) m = Math.max(m, c.d ? maxFile(c) : c.r || c.free ? 0 : c.s); return m; }
+function build3d() {
+  if (!init3d()) return;
+  $("empty").classList.toggle("hidden", tree.s > 0);
+  WZ = Math.max(120, Math.min(320, WX * H / Math.max(1, W)));
+  boxes = []; layout3d.max = maxFile(tree);
+  if (tree.s > 0) layout3d(tree, -WX / 2, -WZ / 2, WX, WZ, 0, boxes);
+  const data = new Float32Array(boxes.length * 30 * 12); let k = 0;
+  const v = (b, x, y, z, u, w, su, sv, shade) => { data[k++] = x; data[k++] = y; data[k++] = z; data[k++] = b.col[0]; data[k++] = b.col[1]; data[k++] = b.col[2]; data[k++] = u; data[k++] = w; data[k++] = su; data[k++] = sv; data[k++] = shade; data[k++] = b.kind; };
+  const quad = (b, P, su, sv, shade) => { for (const i of [0, 1, 2, 0, 2, 3]) v(b, P[i][0], P[i][1], P[i][2], P[i][3], P[i][4], su, sv, shade); };
+  for (const b of boxes) {
+    const {x0, x1, y0, y1, z0, z1} = b, dx = x1 - x0, dy = y1 - y0, dz = z1 - z0;
+    quad(b, [[x0, y1, z0, 0, 0], [x1, y1, z0, dx, 0], [x1, y1, z1, dx, dz], [x0, y1, z1, 0, dz]], dx, dz, 1.0);
+    quad(b, [[x0, y0, z1, 0, 0], [x1, y0, z1, dx, 0], [x1, y1, z1, dx, dy], [x0, y1, z1, 0, dy]], dx, dy, 0.80);
+    quad(b, [[x0, y0, z0, 0, 0], [x1, y0, z0, dx, 0], [x1, y1, z0, dx, dy], [x0, y1, z0, 0, dy]], dx, dy, 0.55);
+    quad(b, [[x1, y0, z0, 0, 0], [x1, y0, z1, dz, 0], [x1, y1, z1, dz, dy], [x1, y1, z0, 0, dy]], dz, dy, 0.68);
+    quad(b, [[x0, y0, z0, 0, 0], [x0, y0, z1, dz, 0], [x0, y1, z1, dz, dy], [x0, y1, z0, 0, dy]], dz, dy, 0.62);
+  }
+  nVerts = boxes.length * 30;
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  states = new Float32Array(nVerts);
+  labelBoxes = boxes.filter(b => !b.node.r).sort((a, b) => (b.x1 - b.x0) * (b.z1 - b.z0) - (a.x1 - a.x0) * (a.z1 - a.z0)).slice(0, 220);
+  if (camPath !== viewPath) { camPath = viewPath; cam = {x: 0, y: WZ * 0.42 + 26, z: WZ / 2 + WZ * 0.55 + 30, yaw: 0, pitch: -0.52}; }
+  sel3d();
+  if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(frame); }
+}
+function inside(n, s) { const p = n.r ? n.parent.path : n.path; return p === s.path || p.startsWith(s.path.endsWith(SEP) ? s.path : s.path + SEP); }
+function sel3d() {
+  if (!gl || !states) return;
+  boxes.forEach((b, i) => {
+    let s = 0; const n = b.node;
+    if (n.free) { states.fill(0, i * 30, i * 30 + 30); return; }
+    if (selected) { if (selected.d) s = inside(n, selected) ? 1 : -1; else if (n.path === selected.path) s = 1; }
+    if (catFilter >= 0 && b.kind === 1 && (n.r || n.c !== catFilter)) s = -1;
+    if (basket.size && !n.r && basketCovers(n.path)) s = 2;
+    states.fill(s, i * 30, i * 30 + 30);
+  });
+  gl.bindBuffer(gl.ARRAY_BUFFER, sbo); gl.bufferData(gl.ARRAY_BUFFER, states, gl.DYNAMIC_DRAW);
+  const file = selected && !selected.d;
+  $("card3d").classList.toggle("hidden", !file || modeClean);
+  if (file) { $("c3name").textContent = selected.n; $("c3size").textContent = fmt(selected.s) + " · " + CATS[selected.c]; if (document.pointerLockElement === glc) document.exitPointerLock(); }
+}
+function camVecs() {
+  const cp = Math.cos(cam.pitch), f = [Math.sin(cam.yaw) * cp, Math.sin(cam.pitch), -Math.cos(cam.yaw) * cp], r = [Math.cos(cam.yaw), 0, Math.sin(cam.yaw)];
+  const u = [-r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1]];
+  return {f, r, u};
+}
+function viewProj() {
+  const {f, r, u} = camVecs(), p = [cam.x, cam.y, cam.z], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const V = [r[0], u[0], -f[0], 0, r[1], u[1], -f[1], 0, r[2], u[2], -f[2], 0, -dot(r, p), -dot(u, p), dot(f, p), 1];
+  const t = 1 / Math.tan(FOV / 2), a = W / Math.max(1, H), n = 0.3, fa = 4000;
+  const P = [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0];
+  const M = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let rw = 0; rw < 4; rw++) { let s = 0; for (let i = 0; i < 4; i++) s += P[i * 4 + rw] * V[c * 4 + i]; M[c * 4 + rw] = s; }
+  return M;
+}
+function pick(mx, my) {
+  const {f, r, u} = camVecs(); let d = f;
+  if (mx != null) { const t = Math.tan(FOV / 2), nx = (2 * mx / W - 1) * t * W / H, ny = (1 - 2 * my / H) * t; d = [f[0] + r[0] * nx + u[0] * ny, f[1] + r[1] * nx + u[1] * ny, f[2] + r[2] * nx + u[2] * ny]; }
+  const o = [cam.x, cam.y, cam.z]; let best = null, bt = Infinity;
+  for (const b of boxes) {
+    let t0 = 0, t1 = Infinity; const lo = [b.x0, b.y0, b.z0], hi = [b.x1, b.y1, b.z1]; let ok = true;
+    for (let i = 0; i < 3; i++) {
+      if (Math.abs(d[i]) < 1e-9) { if (o[i] < lo[i] || o[i] > hi[i]) { ok = false; break; } continue; }
+      let a = (lo[i] - o[i]) / d[i], c = (hi[i] - o[i]) / d[i]; if (a > c) [a, c] = [c, a];
+      t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) { ok = false; break; }
+    }
+    if (ok && t0 < bt) { bt = t0; best = b; }
+  }
+  return best;
+}
+function frame(now) {
+  raf = 0;
+  if (!mode3d || $("app").classList.contains("hidden")) return;
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const {f, r} = camVecs(), sp = (keys.ShiftLeft || keys.ShiftRight ? 150 : 48) * dt;
+  let mf = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), ms = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0), mu = (keys.KeyE ? 1 : 0) - (keys.KeyQ ? 1 : 0);
+  cam.x += (f[0] * mf + r[0] * ms) * sp; cam.y += (f[1] * mf + mu) * sp; cam.z += (f[2] * mf + r[2] * ms) * sp;
+  cam.y = Math.max(1.5, Math.min(900, cam.y)); cam.x = Math.max(-1500, Math.min(1500, cam.x)); cam.z = Math.max(-1500, Math.min(1500, cam.z));
+  const M = viewProj(), locked = document.pointerLockElement === glc;
+  gl.viewport(0, 0, glc.width, glc.height); gl.clearColor(BG[0], BG[1], BG[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+  gl.useProgram(gridProg); gl.uniformMatrix4fv(gl.getUniformLocation(gridProg, "uVP"), false, M); gl.uniform3fv(gl.getUniformLocation(gridProg, "uBg"), BG); gl.uniform3f(gl.getUniformLocation(gridProg, "uCam"), cam.x, cam.y, cam.z);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gridVbo); for (let i = 1; i < 6; i++) gl.disableVertexAttribArray(i); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.TRIANGLES, 0, 6);
+  if (nVerts) {
+    gl.useProgram(prog); gl.uniformMatrix4fv(gl.getUniformLocation(prog, "uVP"), false, M); gl.uniform3fv(gl.getUniformLocation(prog, "uBg"), BG); gl.uniform3f(gl.getUniformLocation(prog, "uCam"), cam.x, cam.y, cam.z);
+    const calm = matchMedia("(prefers-reduced-motion: reduce)").matches; gl.uniform1f(gl.getUniformLocation(prog, "uPulse"), calm ? 0.5 : 0.5 + 0.5 * Math.sin(now / 260));
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo); const S = 48;
+    [[0, 3, 0], [1, 3, 12], [2, 2, 24], [3, 2, 32], [4, 2, 40]].forEach(([l, n, off]) => { gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, n, gl.FLOAT, false, S, off); });
+    gl.bindBuffer(gl.ARRAY_BUFFER, sbo); gl.enableVertexAttribArray(5); gl.vertexAttribPointer(5, 1, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, nVerts);
+  }
+  if (dusts.length) {
+    gl.useProgram(dustProg); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    gl.uniformMatrix4fv(gl.getUniformLocation(dustProg, "uVP"), false, M); gl.uniform3f(gl.getUniformLocation(dustProg, "uCam"), cam.x, cam.y, cam.z);
+    gl.disableVertexAttribArray(4); gl.disableVertexAttribArray(5);
+    for (const d of dusts) {
+      const tt = (now - d.t0) / 1000;
+      gl.uniform1f(gl.getUniformLocation(dustProg, "uT"), tt); gl.uniform1f(gl.getUniformLocation(dustProg, "uScale"), d.size * glc.height / (2 * Math.tan(FOV / 2)));
+      gl.uniform3fv(gl.getUniformLocation(dustProg, "uCol"), d.col);
+      gl.bindBuffer(gl.ARRAY_BUFFER, d.buf);
+      [[0, 3, 0], [1, 3, 12], [2, 1, 24], [3, 1, 28]].forEach(([l, n, off]) => { gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, n, gl.FLOAT, false, 32, off); });
+      gl.drawArrays(gl.POINTS, 0, d.n);
+      if (tt > d.life) { gl.deleteBuffer(d.buf); d.dead = true; }
+    }
+    dusts = dusts.filter(d => !d.dead); gl.depthMask(true); gl.disable(gl.BLEND);
+  }
+  // Labels and HUD on the 2D overlay
+  octx.clearRect(0, 0, W, H); octx.textBaseline = "middle"; octx.textAlign = "center";
+  const proj = (x, y, z) => { const w = M[3] * x + M[7] * y + M[11] * z + M[15]; if (w < 0.5) return null; return [((M[0] * x + M[4] * y + M[8] * z + M[12]) / w * 0.5 + 0.5) * W, (1 - ((M[1] * x + M[5] * y + M[9] * z + M[13]) / w * 0.5 + 0.5)) * H, w]; };
+  const focal = H / (2 * Math.tan(FOV / 2)), used = [], cands = [];
+  for (const b of labelBoxes) { const p = b.kind ? proj((b.x0 + b.x1) / 2, b.y1, (b.z0 + b.z1) / 2) : proj((b.x0 + b.x1) / 2, b.y1, b.z1); if (p && p[0] > -50 && p[0] < W + 50 && p[1] > 0 && p[1] < H) cands.push([b, p]); }
+  cands.sort((a, b) => a[1][2] - b[1][2]);
+  for (const [b, p] of cands) {
+    const px = (b.x1 - b.x0) * focal / p[2]; if (px < 64) continue;
+    const st = states[boxes.indexOf(b) * 30]; if (st < 0) continue;
+    octx.font = `${b.kind ? 500 : 600} 12.5px ${FONT}`; const gl3 = !b.kind && big(b.node) ? "  " + arrow(b.node.g) : ""; let txt = fit(octx, b.node.n, Math.min(px, 260)); if (!txt) continue; txt += gl3;
+    const tw = octx.measureText(txt).width, x = p[0], y = p[1] - (b.kind ? 12 : -9), box = [x - tw / 2 - 4, y - 9, x + tw / 2 + 4, y + (b.kind ? 22 : 9)];
+    if (used.some(u => box[0] < u[2] && box[2] > u[0] && box[1] < u[3] && box[3] > u[1])) continue; used.push(box);
+    octx.shadowColor = "#03050B"; octx.shadowBlur = 5; octx.fillStyle = b.kind ? "#fff" : "#8FE6FF"; octx.fillText(txt, x, y);
+    if (b.kind) { octx.font = `12px ${FONT}`; octx.fillStyle = "rgba(255,255,255,.72)"; octx.fillText(fmt(b.node.s), x, y + 14); }
+    octx.shadowBlur = 0;
+  }
+  if (locked) {
+    octx.strokeStyle = "#fff"; octx.lineWidth = 1.5; octx.beginPath(); octx.moveTo(W / 2 - 8, H / 2); octx.lineTo(W / 2 - 2, H / 2); octx.moveTo(W / 2 + 2, H / 2); octx.lineTo(W / 2 + 8, H / 2); octx.moveTo(W / 2, H / 2 - 8); octx.lineTo(W / 2, H / 2 - 2); octx.moveTo(W / 2, H / 2 + 2); octx.lineTo(W / 2, H / 2 + 8); octx.stroke();
+    hover3d = pick();
+  }
+  if (hover3d && $("card3d").classList.contains("hidden")) {
+    const n = hover3d.node, txt = (n.r ? t("small_grouped", nf(n.r)) : n.n) + "  ·  " + fmt(n.s);
+    octx.font = `600 15px ${FONT}`; const tw = octx.measureText(txt).width + 24, y = locked ? H / 2 + 34 : H - 26;
+    octx.fillStyle = "rgba(3,8,18,.85)"; octx.fillRect(W / 2 - tw / 2, y - 14, tw, 28); octx.strokeStyle = "#37D7FF"; octx.lineWidth = 1; octx.strokeRect(W / 2 - tw / 2 + .5, y - 13.5, tw - 1, 27);
+    octx.fillStyle = "#fff"; octx.fillText(txt, W / 2, y + 1);
+  }
+  octx.textAlign = "left";
+  const hud = locked ? "hud_locked" : "hud_free"; if ($("hud3d").dataset.k !== hud + LANG) { $("hud3d").dataset.k = hud + LANG; $("hud3d").innerHTML = t(hud); }
+  raf = requestAnimationFrame(frame);
+}
+// Turns a box into drifting dust: used when something goes to the Recycle Bin in 3D.
+function dust3d(path) {
+  if (!gl || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const b = boxes.find(b => b.node.path === path); if (!b) return;
+  const dx = b.x1 - b.x0, dy = b.y1 - b.y0, dz = b.z1 - b.z0, faces = [dx * dz, dx * dy, dx * dy, dz * dy, dz * dy];
+  const area = faces.reduce((a, v) => a + v, 0), n = Math.round(Math.max(1500, Math.min(16000, area * 7))), data = new Float32Array(n * 8), R = Math.random;
+  for (let i = 0; i < n; i++) {
+    let r = R() * area, f = 0; while (f < 4 && r > faces[f]) r -= faces[f++];
+    const u = R(), v = R(); let x, y, z;
+    if (f === 0) { x = b.x0 + u * dx; y = b.y1; z = b.z0 + v * dz; }
+    else if (f === 1) { x = b.x0 + u * dx; y = b.y0 + v * dy; z = b.z1; }
+    else if (f === 2) { x = b.x0 + u * dx; y = b.y0 + v * dy; z = b.z0; }
+    else if (f === 3) { x = b.x1; y = b.y0 + v * dy; z = b.z0 + u * dz; }
+    else { x = b.x0; y = b.y0 + v * dy; z = b.z0 + u * dz; }
+    const o = i * 8;
+    data[o] = x; data[o + 1] = y; data[o + 2] = z;
+    data[o + 3] = (R() - 0.3) * 3; data[o + 4] = R() * 2.5; data[o + 5] = (R() - 0.5) * 3;
+    data[o + 6] = (x - b.x0) / dx * 1.7 + (1 - (y - b.y0) / dy) * 0.5 + R() * 0.3; data[o + 7] = R();
+  }
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  dusts.push({buf, n, col: b.col, size: Math.sqrt(area / n) * 1.5, t0: performance.now(), life: 5.0});
+}
+function click3d(b) {
+  if (!b) { select(null); return; }
+  const n = b.node.r ? b.node.parent : b.node;
+  select(n && n.path !== viewPath ? n : null);
+}
+glc.addEventListener("mousedown", e => {
+  if (e.button !== 0) return;
+  const locked = document.pointerLockElement === glc, b = locked ? pick() : pick(...pos(e));
+  click3d(b);
+  if (!locked && !(selected && !selected.d)) glc.requestPointerLock();
+});
+glc.addEventListener("dblclick", () => { if (selected && selected.d) go(selected.path); });
+glc.addEventListener("mousemove", e => { if (document.pointerLockElement !== glc) hover3d = pick(...pos(e)); });
+glc.addEventListener("mouseleave", () => { if (document.pointerLockElement !== glc) hover3d = null; });
+document.addEventListener("mousemove", e => {
+  if (document.pointerLockElement !== glc) return;
+  cam.yaw += e.movementX * 0.0022; cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch - e.movementY * 0.0022));
+});
+document.addEventListener("keydown", e => { if (mode3d && e.target.tagName !== "INPUT" && !$("dlg").open && !e.ctrlKey && !e.altKey && !e.metaKey) keys[e.code] = true; });
+document.addEventListener("keyup", e => { keys[e.code] = false; });
+window.addEventListener("blur", () => { keys = {}; });
+$("c3reveal").onclick = () => $("revealBtn").click();
+$("c3trash").onclick = () => askTrash();
+function setView(v) {
+  if (v === "3d" && !init3d()) { toast(t("no_webgl")); return; }
+  modeClean = v === "clean"; $("stage").classList.toggle("cleanv", modeClean); $("clean").classList.toggle("hidden", !modeClean);
+  mode3d = v === "3d"; keys = {}; hover = null; hover3d = null; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (!mode3d && document.pointerLockElement === glc) document.exitPointerLock();
+  document.querySelectorAll(".view button").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  $("stage").classList.toggle("three", mode3d); $("hud3d").classList.toggle("hidden", !mode3d); $("tip").classList.add("hidden");
+  if (!mode3d) $("card3d").classList.add("hidden");
+  octx.clearRect(0, 0, W, H);
+  if (tree) { render(); if (!mode3d) drawOver(); }
+}
+
+/* ---------- Basket, changes and clean-up ---------- */
+const arrow = g => (g > 0 ? "▲ +" : "▼ −") + fmt(Math.abs(g));
+const big = n => !!n.g && !!status.prevTime && Math.abs(n.g) >= Math.max(50 * MB, tree.s * 0.002);
+function basketCovers(p) { if (basket.has(p)) return true; for (const k of basket.keys()) if (p.startsWith(k.endsWith(SEP) ? k : k + SEP)) return true; return false; }
+function basketDrop(p) { for (const k of [...basket.keys()]) if (k === p || k.startsWith(p.endsWith(SEP) ? p : p + SEP)) basket.delete(k); }
+function basketToggle(n, quiet) {
+  if (!n || !n.path || n.path === scanRoot) return;
+  if (basket.has(n.path)) basket.delete(n.path);
+  else if (basketCovers(n.path)) { if (!quiet) toast(t("basket_inside")); return; }
+  else { basketDrop(n.path); basket.set(n.path, {n: n.n, path: n.path, s: n.s, d: n.d, c: n.c, m: n.m, f: n.f}); }
+  if (!quiet) basketUI();
+}
+function basketBtns() {
+  const on = !!selected && basket.has(selected.path), txt = t(on ? "basket_remove" : "basket_add");
+  for (const id of ["basketBtn", "c3basket"]) { $(id).textContent = txt; $(id).disabled = !!selected && !on && basketCovers(selected.path); }
+}
+function basketUI() {
+  let total = 0; const box = $("basketList"); box.innerHTML = "";
+  for (const it of basket.values()) {
+    total += it.s; const row = document.createElement("div"); row.className = "bitem"; row.title = it.path;
+    row.innerHTML = `<span>${esc(it.n)}</span><span class="num">${fmt(it.s)}</span><button aria-label="${t("basket_remove")}" title="${t("basket_remove")}">×</button>`;
+    row.querySelector("button").onclick = () => { basket.delete(it.path); basketUI(); };
+    row.querySelector("span").style.cursor = "pointer"; row.querySelector("span").onclick = () => select(it);
+    box.append(row);
+  }
+  $("basketSec").classList.toggle("hidden", !basket.size);
+  $("basketTitle").textContent = t("basket_title", nf(basket.size)); $("basketTotal").textContent = fmt(total);
+  basketBtns();
+  if (modeClean) document.querySelectorAll(".cb").forEach(b => { const it = cleanItems[b.dataset.i]; if (it) { const on = basket.has(it.path); b.classList.toggle("on", on); b.textContent = on ? "✓" : "+"; b.setAttribute("aria-pressed", on); } });
+  else if (mode3d) sel3d(); else if (tree) drawOver();
+}
+$("basketBtn").onclick = () => basketToggle(selected);
+$("c3basket").onclick = () => basketToggle(selected);
+$("basketClear").onclick = () => { basket.clear(); basketUI(); };
+$("basketTrash").onclick = () => {
+  if (!basket.size) return; dlgMany = true; const items = [...basket.values()], total = items.reduce((a, i) => a + i.s, 0);
+  $("dlgTitle").textContent = t("dlg_many", nf(items.length), fmt(total));
+  $("dlgWhat").innerHTML = items.slice(0, 6).map(i => `${esc(i.n)} <small>(${fmt(i.s)})</small>`).join("<br>") + (items.length > 6 ? `<br><small>${t("and_more", nf(items.length - 6))}</small>` : "");
+  $("dlg").showModal(); $("dlgNo").focus();
+};
+async function trashBasket() {
+  $("dlg").close(); $("dlgYes").disabled = true; let ok = 0, size = 0, bad = 0;
+  const all = [...basket.values()]; let k = 0;
+  for (const it of all) {
+    toast(t("sending", nf(++k), nf(all.length)));
+    try { const r = await api("/api/trash", {path: it.path}); ok++; size += r.size; if (mode3d) dust3d(it.path); basket.delete(it.path); if (selected && selected.path === it.path) selected = null; }
+    catch (e) { bad++; }
+  }
+  $("dlgYes").disabled = false; dlgMany = false;
+  toast(bad ? t("toast_many_fail", nf(ok), fmt(size), nf(bad)) : t("toast_many", nf(ok), fmt(size)));
+  status = await api("/api/status"); go(viewPath);
+}
+document.addEventListener("keydown", e => {
+  if ($("app").classList.contains("hidden") || $("dlg").open || e.target.tagName === "INPUT" || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.code === "KeyB" && selected) basketToggle(selected);
+});
+async function loadChanges() {
+  const id = reqId; let r; try { r = await api("/api/changes?path=" + encodeURIComponent(viewPath)); } catch { return; }
+  if (id !== reqId) return;
+  const box = $("changesList"); box.innerHTML = "";
+  $("changesTitle").textContent = r.prev ? t("changes_title", fdate(r.prev)) : t("changes_title0");
+  if (!r.prev) { box.innerHTML = `<p>${t("changes_first")}</p>`; return; }
+  if (!r.items.length) { box.innerHTML = `<p>${t("changes_none")}</p>`; return; }
+  for (const it of r.items) {
+    const b = document.createElement("button"); b.className = "chg"; b.title = it.p;
+    b.innerHTML = `<div><b>${esc(base(it.p))}</b><small>${esc(parentOf(it.p))}</small></div><span class="num ${it.g > 0 ? "grow" : "shrink"}">${arrow(it.g)}</span>`;
+    b.onclick = () => select({n: base(it.p), path: it.p, s: it.s, d: 1, g: it.g});
+    box.append(b);
+  }
+}
+let cleanItems = [], cleanGroups = {}, dupTimer = 0;
+async function loadClean() {
+  const id = reqId, path = viewPath; let c, d;
+  try { [c, d] = await Promise.all([api("/api/cleanup?path=" + encodeURIComponent(path)), api("/api/dups")]); } catch (e) { toast(e.message); return; }
+  if (id !== reqId || !modeClean) return;
+  cleanItems = []; cleanGroups = {};
+  const item = (it, extra) => { const o = {n: base(it.p), path: it.p, s: it.s, c: it.c, m: it.m, d: it.d, f: it.f}; cleanItems.push(o); const i = cleanItems.length - 1, on = basket.has(it.p);
+    return `<div class="crow${selected && selected.path === it.p ? " sel" : ""}" data-i="${i}"><button class="cb${on ? " on" : ""}" data-act="basket" data-i="${i}" aria-pressed="${on}" title="${t("basket_add")}">${on ? "✓" : "+"}</button><i style="background:${it.d ? "#37A9C9" : COL[it.c]}"></i><div><b>${esc(o.n)}${extra || ""}</b><small>${esc(parentOf(it.p))}</small></div><span class="dt num">${fdate(it.m)}</span><span class="sz num">${fmt(it.s)}</span></div>`; };
+  const group = (key, title, sub, g, addAll) => {
+    const start = cleanItems.length, rows = g.items.map(it => item(it)).join(""); cleanGroups[key] = [start, cleanItems.length];
+    return `<section><header><h3>${t(title)}</h3><span class="tot num">${fmt(g.total)}</span><span>${t("total_items", nf(g.count))}</span><span class="sp"></span>${addAll && g.items.length ? `<button data-act="addall" data-k="${key}">${t("add_all")}</button>` : ""}<p>${t(sub)}${g.count > g.items.length ? " " + t("more_small") : ""}</p></header>${rows || `<div class="none">${t("clean_empty")}</div>`}</section>`;
+  };
+  let html = `<p class="intro">${t("clean_intro", `<b>${esc(path)}</b>`)}</p>` + group("caches", "clean_caches", "clean_caches_sub", c.caches, true) + group("installers", "clean_inst", "clean_inst_sub", c.installers, true) + group("old", "clean_old", "clean_old_sub", c.old, false);
+  let dh = "";
+  const mine = d.path === path;
+  if (d.state === "running" && mine) dh = `<div class="none">${t("dups_running", nf(d.done), nf(d.total))}</div><div class="prog"><u style="width:${d.total ? (d.done / d.total * 100).toFixed(1) : 0}%"></u></div>`;
+  else if (d.state === "done" && mine) {
+    dh = d.groups.length ? d.groups.map((g, gi) => { const start = cleanItems.length, rows = g.files.map((f, fi) => item({p: f.p, s: g.s, m: f.m, c: f.c}, fi === 0 ? `<span class="keep">${t("dups_keep")}</span>` : "")).join(""); cleanGroups["dup" + gi] = [start + 1, cleanItems.length];
+      return `<div class="dgrp"><span>${t("dups_group", nf(g.files.length), fmt(g.s), fmt(g.s * (g.files.length - 1)))}</span><span class="sp"></span><button data-act="addall" data-k="dup${gi}">${t("dups_add")}</button></div>${rows}`; }).join("") : `<div class="none">${t("dups_none")}</div>`;
+  } else dh = `<div class="none">${d.state !== "idle" && !mine ? t("dups_other") + " " : ""}</div>`;
+  const showBtn = !(d.state === "running" && mine);
+  html += `<section><header><h3>${t("clean_dups")}</h3>${d.state === "done" && mine ? `<span class="tot num">${fmt(d.waste)}</span>` : ""}<span class="sp"></span>${showBtn ? `<button data-act="dupfind" class="${d.state === "done" && mine ? "" : "primary"}">${t(d.state === "done" && mine ? "dups_again" : "dups_find")}</button>` : ""}<p>${t("clean_dups_sub")}</p></header>${dh}</section>`;
+  const sc = $("clean").scrollTop; $("clean").innerHTML = html; $("clean").scrollTop = sc;
+  clearTimeout(dupTimer); if (d.state === "running" && mine) dupTimer = setTimeout(() => { if (modeClean) loadClean(); }, 600);
+}
+$("clean").addEventListener("click", async e => {
+  const btn = e.target.closest("[data-act]"), row = e.target.closest(".crow");
+  if (btn && btn.dataset.act === "basket") { basketToggle(cleanItems[btn.dataset.i]); return; }
+  if (btn && btn.dataset.act === "addall") { const [a, b] = cleanGroups[btn.dataset.k] || [0, 0]; for (let i = a; i < b; i++) if (!basketCovers(cleanItems[i].path)) basketToggle(cleanItems[i], true); basketUI(); return; }
+  if (btn && btn.dataset.act === "dupfind") { try { await api("/api/dups", {path: viewPath}); } catch (er) { toast(er.message); } loadClean(); return; }
+  if (row) select(cleanItems[row.dataset.i]);
+});
+$("freeBtn").setAttribute("aria-pressed", showFree);
+$("freeBtn").onclick = () => {
+  showFree = !showFree; try { localStorage.setItem("mapadisco.free", showFree ? "1" : "0"); } catch {}
+  $("freeBtn").setAttribute("aria-pressed", showFree);
+  if (showFree && viewPath !== scanRoot) toast(t("free_root"));
+  go(viewPath, true);
+};
+document.querySelectorAll(".view button").forEach(b => b.onclick = () => setView(b.dataset.view));
+document.querySelectorAll(".det button").forEach(b => b.onclick = () => { detail = +b.dataset.d; document.querySelectorAll(".det button").forEach(x => x.classList.toggle("on", x === b)); go(viewPath, true); });
+document.querySelectorAll(".lang button").forEach(b => b.onclick = () => setLang(b.dataset.lang));
+applyLang();
+$("rescanBtn").onclick = () => scan(scanRoot);
+$("changeBtn").onclick = () => { show("start"); loadPlaces(); };
+
+(async function init() {
+  try { const s = await api("/api/status"); SEP = s.sep; if (s.state !== "idle") { show(s.state === "scanning" ? "scanning" : "app"); poll(); return; } } catch {}
+  loadPlaces();
+})();
+</script>
+</body>
+</html>
