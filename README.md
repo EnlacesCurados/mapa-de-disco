@@ -120,7 +120,7 @@ The 3D view needs a browser with WebGL 2 (current Chrome, Edge or Firefox).
 You need [Go](https://go.dev/dl/) 1.24 or newer. There are no other dependencies.
 
 ```
-git clone https://github.com/YOUR-USER/mapa-de-disco.git
+git clone https://github.com/EnlacesCurados/mapa-de-disco.git
 cd mapa-de-disco
 go build -trimpath -ldflags "-s -w" -o MapaDeDisco.exe .
 ```
